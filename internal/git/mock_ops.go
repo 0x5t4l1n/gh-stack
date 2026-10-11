@@ -25,6 +25,7 @@ type MockOps struct {
 	DefaultBranchFn          func() (string, error)
 	CreateBranchFn           func(string, string) error
 	PushFn                   func(string, []string, bool, bool) error
+	RemoteURLFn              func(string) (string, error)
 	ResolveRemoteFn          func(string) (string, error)
 	RebaseFn                 func(string, RebaseOpts) error
 	EnableRerereFn           func() error
@@ -178,6 +179,13 @@ func (m *MockOps) Push(remote string, branches []string, force, atomic bool) err
 		return m.PushFn(remote, branches, force, atomic)
 	}
 	return nil
+}
+
+func (m *MockOps) RemoteURL(remote string) (string, error) {
+	if m.RemoteURLFn != nil {
+		return m.RemoteURLFn(remote)
+	}
+	return "https://github.com/owner/repo.git", nil
 }
 
 func (m *MockOps) ResolveRemote(branch string) (string, error) {

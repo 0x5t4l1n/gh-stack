@@ -312,6 +312,11 @@ func Push(remote string, branches []string, force, atomic bool) error {
 	return ops.Push(remote, branches, force, atomic)
 }
 
+// RemoteURL returns the push/fetch URL for the named remote.
+func RemoteURL(remote string) (string, error) {
+	return ops.RemoteURL(remote)
+}
+
 // ResolveRemote determines the remote for pushing a branch. Checks git
 // config in priority order, falls back to listing remotes. Returns
 // *ErrMultipleRemotes if multiple remotes exist with no configured default.

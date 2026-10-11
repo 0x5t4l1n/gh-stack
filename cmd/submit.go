@@ -111,6 +111,19 @@ func runSubmit(cfg *config.Config, opts *submitOptions) error {
 	}
 	s := stacks[0]
 
+	// Resolve the push remote first so that every GitHub API operation in this
+	// command — client creation, PR lookup, stack sync — is bound to the same
+	// repository as the git push. In multi-remote clones (e.g. origin=upstream,
+	// fork=push target) repository.Current() may otherwise fall back to the
+	// origin remote and silently target the wrong repository.
+	remote, err := pickRemote(cfg, currentBranch, opts.remote)
+	if err != nil {
+		if !errors.Is(err, errInterrupt) {
+			cfg.Errorf("%s", err)
+		}
+		return ErrSilent
+	}
+
 	client, err := cfg.GitHubClient()
 	if err != nil {
 		cfg.Errorf("failed to create GitHub client: %s", err)
@@ -158,14 +171,6 @@ func runSubmit(cfg *config.Config, opts *submitOptions) error {
 		}
 	}
 
-	// Resolve remote for pushing
-	remote, err := pickRemote(cfg, currentBranch, opts.remote)
-	if err != nil {
-		if !errors.Is(err, errInterrupt) {
-			cfg.Errorf("%s", err)
-		}
-		return ErrSilent
-	}
 	merged := s.MergedBranches()
 	if len(merged) > 0 {
 		cfg.Printf("Skipping %d merged %s", len(merged), plural(len(merged), "branch", "branches"))

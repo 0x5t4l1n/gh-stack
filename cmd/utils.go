@@ -1630,6 +1630,11 @@ func ensureRerere(cfg *config.Config) error {
 // the choice via gh-stack.remote git config.
 func pickRemote(cfg *config.Config, branch, remoteOverride string) (string, error) {
 	if remoteOverride != "" {
+		// Save the explicitly supplied remote so that subsequent GitHubClient()
+		// and Repo() calls (e.g. in syncStackPRs and the submit TUI) resolve
+		// the API repository from the same remote as git push. Silently ignored
+		// when the save fails (e.g. no git config write access).
+		_ = git.SaveRemote(remoteOverride)
 		return remoteOverride, nil
 	}
 

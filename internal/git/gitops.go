@@ -48,6 +48,7 @@ type Ops interface {
 	DefaultBranch() (string, error)
 	CreateBranch(name, base string) error
 	Push(remote string, branches []string, force, atomic bool) error
+	RemoteURL(remote string) (string, error)
 	ResolveRemote(branch string) (string, error)
 	Rebase(base string, opts RebaseOpts) error
 	EnableRerere() error
@@ -290,6 +291,15 @@ func (d *defaultOps) Push(remote string, branches []string, force, atomic bool) 
 }
 
 // ResolveRemote determines the remote for pushing a branch. It checks git
+// RemoteURL returns the push/fetch URL for the named remote.
+func (d *defaultOps) RemoteURL(remote string) (string, error) {
+	url, err := d.run("remote", "get-url", remote)
+	if err != nil {
+		return "", fmt.Errorf("getting URL for remote %q: %w", remote, err)
+	}
+	return url, nil
+}
+
 // config keys in priority order (branch.<name>.pushRemote, remote.pushDefault,
 // branch.<name>.remote), then checks the gh-stack.remote saved preference,
 // then falls back to listing all remotes. If exactly one remote exists it is
@@ -815,7 +825,12 @@ func (d *defaultOps) HasUncommittedChanges() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return out != "", nil
+	for _, line := range strings.Split(out, "\n") {
+		if line != "" && !strings.HasPrefix(line, "?? ") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (d *defaultOps) LogMerges(base, head string) ([]CommitInfo, error) {

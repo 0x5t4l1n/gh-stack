@@ -10,6 +10,7 @@ import (
 	"github.com/cli/go-gh/v2/pkg/term"
 
 	ghapi "github.com/github/gh-stack/internal/github"
+	"github.com/github/gh-stack/internal/git"
 	"github.com/github/gh-stack/internal/theme"
 )
 
@@ -199,12 +200,51 @@ func (c *Config) Repo() (repository.Repository, error) {
 	if c.RepoOverride != nil {
 		return *c.RepoOverride, nil
 	}
+	// If a push remote has been saved (via --remote or interactive selection),
+	// derive the repository from that remote's URL so that the display and API
+	// operations are consistent with the push target.
+	if saved, err := git.GetSavedRemote(); err == nil && saved != "" {
+		if rawURL, urlErr := git.RemoteURL(saved); urlErr == nil {
+			if repo, parseErr := repository.Parse(rawURL); parseErr == nil {
+				return repo, nil
+			}
+		}
+	}
 	return repository.Current()
+}
+
+// GitHubClientForRemote creates a GitHub API client bound to the repository
+// that the given remote points to. Use this in preference to GitHubClient()
+// when the target remote is already known (e.g. from the --remote flag), so
+// that PR creation and stack operations target the pushed-to repository rather
+// than the one resolved by repository.Current() which may fall back to origin.
+func (c *Config) GitHubClientForRemote(remote string) (ghapi.ClientOps, error) {
+	if c.GitHubClientOverride != nil {
+		return c.GitHubClientOverride, nil
+	}
+	rawURL, err := git.RemoteURL(remote)
+	if err != nil {
+		return nil, fmt.Errorf("getting URL for remote %q: %w", remote, err)
+	}
+	repo, err := repository.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing remote URL for %q: %w", remote, err)
+	}
+	return ghapi.NewClient(repo.Host, repo.Owner, repo.Name)
 }
 
 func (c *Config) GitHubClient() (ghapi.ClientOps, error) {
 	if c.GitHubClientOverride != nil {
 		return c.GitHubClientOverride, nil
+	}
+	// If a push remote has been saved (via --remote or interactive selection),
+	// bind the API client to that remote's repository. This ensures PR creation
+	// and stack operations target the same repository as git push operations,
+	// even in multi-remote clones where origin points at a different repo.
+	if saved, err := git.GetSavedRemote(); err == nil && saved != "" {
+		if client, clientErr := c.GitHubClientForRemote(saved); clientErr == nil {
+			return client, nil
+		}
 	}
 	repo, err := c.Repo()
 	if err != nil {
