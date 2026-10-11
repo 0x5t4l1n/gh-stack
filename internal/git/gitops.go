@@ -815,7 +815,15 @@ func (d *defaultOps) HasUncommittedChanges() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return out != "", nil
+	// Filter out untracked files (lines starting with '?? ') so that
+	// untracked files alone do not block commands like modify and rebase.
+	// See: https://github.com/github/gh-stack/issues/111
+	for _, line := range strings.Split(out, "\n") {
+		if line != "" && !strings.HasPrefix(line, "?? ") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (d *defaultOps) LogMerges(base, head string) ([]CommitInfo, error) {

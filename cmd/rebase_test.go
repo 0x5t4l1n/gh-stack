@@ -2609,7 +2609,7 @@ func TestRebase_WorktreesPreserveCheckouts(t *testing.T) {
 
 func TestRebase_WorktreesDirtyTargetFailsBeforeMutation(t *testing.T) {
 	repo := setupWorktreeRebaseRepo(t, false)
-	issue250WriteFile(t, repo.parentDir, "uncommitted.txt", "preserve me\n")
+	issue250WriteFile(t, repo.parentDir, "new-parent.txt", "modified tracked content\n")
 	parentBefore := issue250Git(t, repo.dir, "rev-parse", "parent")
 	childBefore := issue250Git(t, repo.dir, "rev-parse", "child")
 	withIssue250Repo(t, repo.childDir)
@@ -2619,7 +2619,7 @@ func TestRebase_WorktreesDirtyTargetFailsBeforeMutation(t *testing.T) {
 
 	assert.Equal(t, parentBefore, issue250Git(t, repo.dir, "rev-parse", "parent"))
 	assert.Equal(t, childBefore, issue250Git(t, repo.dir, "rev-parse", "child"))
-	assert.FileExists(t, filepath.Join(repo.parentDir, "uncommitted.txt"))
+	assert.FileExists(t, filepath.Join(repo.parentDir, "new-parent.txt"))
 	_, err := os.Stat(filepath.Join(repo.gitDir, rebaseStateFile))
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
@@ -2679,16 +2679,16 @@ func TestRebase_WorktreesAbortRetainsRecoveryForNewEdits(t *testing.T) {
 	require.ErrorIs(t, runRebase(cfg, &rebaseOptions{remote: "origin"}), ErrConflict)
 	parentRebased := issue250Git(t, repo.dir, "rev-parse", "parent")
 	require.NotEqual(t, parentBefore, parentRebased)
-	issue250WriteFile(t, repo.parentDir, "new-work.txt", "new work after conflict\n")
+	issue250WriteFile(t, repo.parentDir, "new-parent.txt", "modified after conflict\n") // modify tracked file to block abort
 
 	withIssue250Repo(t, repo.childDir)
 	require.ErrorIs(t, runRebase(cfg, &rebaseOptions{abort: true}), ErrSilent)
 	assert.Equal(t, parentRebased, issue250Git(t, repo.dir, "rev-parse", "parent"))
 	assert.Equal(t, childBefore, issue250Git(t, repo.dir, "rev-parse", "child"))
-	assert.FileExists(t, filepath.Join(repo.parentDir, "new-work.txt"))
+	assert.FileExists(t, filepath.Join(repo.parentDir, "new-parent.txt"))
 	assert.FileExists(t, filepath.Join(repo.gitDir, rebaseStateFile))
 
-	require.NoError(t, os.Remove(filepath.Join(repo.parentDir, "new-work.txt")))
+	issue250WriteFile(t, repo.parentDir, "new-parent.txt", "new parent\n") // restore original to clear dirty state
 	require.NoError(t, runRebase(cfg, &rebaseOptions{abort: true}))
 	assert.Equal(t, parentBefore, issue250Git(t, repo.dir, "rev-parse", "parent"))
 	assert.Equal(t, childBefore, issue250Git(t, repo.dir, "rev-parse", "child"))

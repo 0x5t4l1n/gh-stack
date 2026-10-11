@@ -1643,7 +1643,9 @@ func TestIntegration_WorktreeLocalMutations(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, requireGitState(t, linked.HasStagedChanges))
 	assert.Equal(t, mainHead, gitExec(t, dir, "rev-parse", "HEAD"))
-	writeFile(t, path, "hidden-untracked.txt", "still dirty despite user status configuration")
+	// Modify a tracked file to verify HasUncommittedChanges reports dirty.
+	// Untracked files are intentionally excluded from the dirty check (see issue #111).
+	writeFile(t, path, "init.txt", "modified again after commit")
 	dirty, err := linked.HasUncommittedChanges()
 	require.NoError(t, err)
 	assert.True(t, dirty)

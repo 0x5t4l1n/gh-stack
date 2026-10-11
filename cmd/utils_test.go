@@ -134,7 +134,7 @@ func TestStackSelection_RewritePreflightPreservesCheckout(t *testing.T) {
 	} {
 		t.Run(command.name, func(t *testing.T) {
 			repo := setupSharedTrunkRebaseRepo(t, false)
-			issue250WriteFile(t, repo.parentDir, "unfinished.txt", "preserve this work\n")
+			issue250WriteFile(t, repo.parentDir, "new-parent.txt", "in-progress work\n") // modify tracked file to trigger dirty check
 			beforeRefs := issue250Git(t, repo.dir, "show-ref")
 			beforeCatalog, err := os.ReadFile(filepath.Join(repo.gitDir, "gh-stack"))
 			require.NoError(t, err)
@@ -152,7 +152,7 @@ func TestStackSelection_RewritePreflightPreservesCheckout(t *testing.T) {
 			afterCatalog, err := os.ReadFile(filepath.Join(repo.gitDir, "gh-stack"))
 			require.NoError(t, err)
 			assert.Equal(t, beforeCatalog, afterCatalog)
-			assert.FileExists(t, filepath.Join(repo.parentDir, "unfinished.txt"))
+			assert.FileExists(t, filepath.Join(repo.parentDir, "new-parent.txt"))
 			assert.NoFileExists(t, filepath.Join(repo.gitDir, rebaseStateFile))
 		})
 	}

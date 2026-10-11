@@ -3187,7 +3187,7 @@ func TestApplyPlan_DirtyDistributedOwnerRejectedBeforeMutation(t *testing.T) {
 	root, origin, _, common, sf := setupModifyWorktrees(t, false)
 	owner := filepath.Join(filepath.Dir(origin), "A owner")
 	runModifyGit(t, root, "worktree", "add", "-q", owner, "A")
-	require.NoError(t, os.WriteFile(filepath.Join(owner, "uncommitted.txt"), []byte("keep"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(owner, "a.txt"), []byte("modified tracked"), 0644)) // modify tracked file (issue #111: untracked files must not block)
 	before, err := os.ReadFile(filepath.Join(common, "gh-stack"))
 	require.NoError(t, err)
 	original := runModifyGit(t, root, "rev-parse", "B")
@@ -3647,13 +3647,17 @@ func TestDistributedModify_PreflightsAllTargets(t *testing.T) {
 	for _, condition := range []string{"dirty", "busy"} {
 		t.Run(condition, func(t *testing.T) {
 			repo := setupDistributedModify(t, false)
-			path := filepath.Join(repo.owners["B"], "uncommitted.txt")
 			message := "uncommitted changes"
+			var path string
 			if condition == "busy" {
 				dir := runModifyGit(t, repo.owners["B"], "rev-parse", "--absolute-git-dir")
 				path, message = filepath.Join(dir, "MERGE_HEAD"), "Git operation"
+				require.NoError(t, os.WriteFile(path, []byte("keep\n"), 0644))
+			} else {
+				// Modify a tracked file — untracked files are intentionally ignored (issue #111).
+				path = filepath.Join(repo.owners["B"], "b.txt")
+				require.NoError(t, os.WriteFile(path, []byte("modified tracked\n"), 0644))
 			}
-			require.NoError(t, os.WriteFile(path, []byte("keep\n"), 0644))
 			before, err := os.ReadFile(filepath.Join(repo.common, "gh-stack"))
 			require.NoError(t, err)
 			restore := git.SetOps(requireWorktree(t, git.CurrentOps(), repo.origin))
@@ -3817,12 +3821,15 @@ func TestDistributedModify_FoldThenRebaseRecovery(t *testing.T) {
 			defer restoreCaller()
 			require.NoError(t, os.WriteFile(filepath.Join(repo.owners["A"], "base.txt"), []byte("resolved C\n"), 0644))
 			runModifyGit(t, repo.owners["A"], "add", "base.txt")
-			dirtyPath := filepath.Join(repo.origin, "unrelated.txt")
-			require.NoError(t, os.WriteFile(dirtyPath, []byte("keep"), 0644))
+			// Modify a tracked file to trigger the dirty-tree precondition.
+			// (Untracked files are intentionally ignored since gh-stack/issues/111.)
+			dirtyPath := filepath.Join(repo.origin, "base.txt")
+			require.NoError(t, os.WriteFile(dirtyPath, []byte("dirty tracked content"), 0644))
 			require.ErrorContains(t, ContinueApply(cfg, repo.common, noopUpdateBaseSHAs), "uncommitted changes")
 			assert.True(t, requireGitState(t, requireWorktree(t, originOps, repo.owners["A"]).IsCherryPickInProgress),
 				"other target worktrees must be preflighted before finishing the pending native operation")
-			require.NoError(t, os.Remove(dirtyPath))
+			// Restore the tracked file to clear the dirty state.
+			require.NoError(t, os.WriteFile(dirtyPath, []byte("D\n"), 0644))
 			require.ErrorContains(t, ContinueApply(cfg, repo.common, noopUpdateBaseSHAs), "rebase conflict on new-D")
 			state, err = LoadState(repo.common)
 			require.NoError(t, err)
