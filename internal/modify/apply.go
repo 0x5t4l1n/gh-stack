@@ -14,20 +14,39 @@ import (
 )
 
 // BuildSnapshot captures the current state of the stack for unwind/recovery.
+// Merged branches whose local refs have been pruned are included in the
+// snapshot with an empty TipSHA; they are skipped during SHA resolution so
+// that a missing ref does not cause a fatal git error.
 func BuildSnapshot(s *stack.Stack) (Snapshot, error) {
-	// Collect all branch names
-	names := make([]string, len(s.Branches))
-	for i, b := range s.Branches {
-		names[i] = b.Branch
+	// Collect names of branches that can be resolved locally.
+	// Merged branches whose local ref was pruned are intentionally skipped —
+	// there is no SHA to record, and git rev-parse would fail for them.
+	var resolvable []string
+	for _, b := range s.Branches {
+		if b.IsMerged() {
+			exists, err := git.BranchExists(b.Branch)
+			if err != nil {
+				return Snapshot{}, fmt.Errorf("checking branch %s: %w", b.Branch, err)
+			}
+			if !exists {
+				// Merged and pruned locally — skip SHA resolution.
+				continue
+			}
+		}
+		resolvable = append(resolvable, b.Branch)
 	}
 
-	// Resolve all SHAs
-	shaMap, err := git.RevParseMap(names)
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("resolving branch SHAs: %w", err)
+	// Resolve SHAs for branches that exist locally.
+	shaMap := make(map[string]string)
+	if len(resolvable) > 0 {
+		var err error
+		shaMap, err = git.RevParseMap(resolvable)
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("resolving branch SHAs: %w", err)
+		}
 	}
 
-	// Build branch snapshots
+	// Build branch snapshots. Pruned merged branches get an empty TipSHA.
 	branches := make([]BranchSnapshot, len(s.Branches))
 	for i, b := range s.Branches {
 		branches[i] = BranchSnapshot{
